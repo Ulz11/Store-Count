@@ -114,48 +114,51 @@ export function ListScreen() {
         )}
       </div>
 
-      <ItemDetailModal
-        item={selected}
-        onClose={() => setSelected(null)}
-        onDelete={async (id) => {
-          if (!counter) return;
-          await softDeleteItem(id, counter);
-          await refresh();
-          toast('Deleted', {
-            variant: 'success',
-            duration: 5000,
-            action: {
-              label: 'Undo',
-              onClick: async () => {
-                await restoreItem(id, counter);
-                await refresh();
-                toast('Restored');
+      {selected && (
+        <ItemDetailModal
+          key={selected.id}
+          item={selected}
+          onClose={() => setSelected(null)}
+          onDelete={async (id) => {
+            if (!counter) return;
+            await softDeleteItem(id, counter);
+            await refresh();
+            toast('Deleted', {
+              variant: 'success',
+              duration: 5000,
+              action: {
+                label: 'Undo',
+                onClick: async () => {
+                  await restoreItem(id, counter);
+                  await refresh();
+                  toast('Restored');
+                },
               },
-            },
-          });
-          setSelected(null);
-        }}
-        onUpdate={async (id, updates) => {
-          if (!counter) return;
-          await updateItemFields(id, updates, counter);
-          await refresh();
-          toast('Updated', { variant: 'success' });
-          setSelected(null);
-        }}
-        onAdjustQty={async (id, qty) => {
-          if (!counter) return;
-          await adjustQuantity(id, qty, counter);
-          await refresh();
-          toast('Quantity adjusted', { variant: 'success' });
-          setSelected(null);
-        }}
-      />
+            });
+            setSelected(null);
+          }}
+          onUpdate={async (id, updates) => {
+            if (!counter) return;
+            await updateItemFields(id, updates, counter);
+            await refresh();
+            toast('Updated', { variant: 'success' });
+            setSelected(null);
+          }}
+          onAdjustQty={async (id, qty) => {
+            if (!counter) return;
+            await adjustQuantity(id, qty, counter);
+            await refresh();
+            toast('Quantity adjusted', { variant: 'success' });
+            setSelected(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
 interface ItemDetailModalProps {
-  item: Item | null;
+  item: Item;
   onClose: () => void;
   onDelete: (id: string) => Promise<void>;
   onUpdate: (id: string, updates: Partial<Item>) => Promise<void>;
@@ -163,12 +166,24 @@ interface ItemDetailModalProps {
 }
 
 function ItemDetailModal({ item, onClose, onDelete, onUpdate, onAdjustQty }: ItemDetailModalProps) {
-  const [qty, setQty] = useState(item?.quantity ?? 1);
+  // qty is seeded from item.quantity. Because the parent keys this component
+  // by item.id, switching to a different item gives us a fresh useState — no
+  // stale carry-over.
+  const [qty, setQty] = useState(item.quantity);
 
-  if (!item) return null;
+  const handleSet = () => {
+    const delta = qty - item.quantity;
+    if (delta === 0) return;
+    // Confirm big swings so a stale-input doesn't silently corrupt the count
+    if (Math.abs(delta) >= 5) {
+      const msg = `Change quantity from ${item.quantity} to ${qty} (${delta > 0 ? '+' : ''}${delta})?`;
+      if (!confirm(msg)) return;
+    }
+    void onAdjustQty(item.id, qty);
+  };
 
   return (
-    <Modal open={!!item} onClose={onClose} title="Item details" fullScreen>
+    <Modal open onClose={onClose} title="Item details" fullScreen>
       <div className="px-5 py-4 space-y-4">
         {item.photoUrl && (
           <img src={item.photoUrl} alt="" className="w-full max-h-64 object-contain rounded-2xl bg-ink-800" />
@@ -189,26 +204,33 @@ function ItemDetailModal({ item, onClose, onDelete, onUpdate, onAdjustQty }: Ite
 
         <div>
           <label className="block text-ink-300 text-xs uppercase tracking-wider mb-2">
-            Quantity
+            Quantity · current <span className="text-white">{item.quantity}</span>
           </label>
           <div className="flex items-center gap-3">
             <input
               type="number"
               inputMode="numeric"
-              min={1}
+              min={0}
               value={qty}
-              onChange={(e) => setQty(Math.max(1, parseInt(e.target.value || '1', 10)))}
+              onChange={(e) => setQty(Math.max(0, parseInt(e.target.value || '0', 10)))}
               className="flex-1 bg-ink-800 text-white text-2xl font-mono px-4 py-3 rounded-2xl outline-none focus:ring-2 focus:ring-accent-orange text-center"
             />
             <Button
               variant="success"
               size="lg"
-              onClick={() => onAdjustQty(item.id, qty)}
+              onClick={handleSet}
               disabled={qty === item.quantity}
             >
               Set
             </Button>
           </div>
+          {qty !== item.quantity && (
+            <p className="text-ink-300 text-xs mt-2 text-right">
+              Change: <span className={qty > item.quantity ? 'text-accent-green' : 'text-accent-red'}>
+                {qty > item.quantity ? '+' : ''}{qty - item.quantity}
+              </span>
+            </p>
+          )}
         </div>
 
         <Button

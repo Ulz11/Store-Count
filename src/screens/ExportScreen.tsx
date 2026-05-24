@@ -4,6 +4,7 @@ import { useSessionStore } from '@/stores/sessionStore';
 import { useSessionTotals } from '@/hooks/useSessionTotals';
 import { Button } from '@/components/ui/Button';
 import { exportSessionToExcel } from '@/services/export';
+import { recomputeSessionTotals } from '@/services/items';
 import { toast } from '@/stores/toastStore';
 import { CURRENCY } from '@/lib/constants';
 
@@ -12,6 +13,7 @@ export function ExportScreen() {
   const session = useSessionTotals(sessionId);
   const [progress, setProgress] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [repairing, setRepairing] = useState(false);
 
   const handleExport = async () => {
     setBusy(true);
@@ -27,6 +29,23 @@ export function ExportScreen() {
     } finally {
       setBusy(false);
       setProgress(null);
+    }
+  };
+
+  const handleRepair = async () => {
+    if (!confirm('Recalculate the session total and item count by summing every non-deleted item? Safe to run anytime.')) return;
+    setRepairing(true);
+    try {
+      const { totalQuantity, itemCount } = await recomputeSessionTotals(sessionId);
+      toast(`Repaired · ${totalQuantity.toLocaleString()} qty · ${itemCount.toLocaleString()} items`, {
+        variant: 'success',
+        duration: 6000,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Repair failed';
+      toast(msg, { variant: 'error' });
+    } finally {
+      setRepairing(false);
     }
   };
 
@@ -72,9 +91,27 @@ export function ExportScreen() {
         </div>
 
         <p className="text-ink-300 text-xs px-1">
-          💡 For best results on a 20,000-row export, use a laptop browser. iPhone Safari
+          For best results on a 20,000-row export, use a laptop browser. iPhone Safari
           can do it but may be slow.
         </p>
+
+        <div className="bg-ink-800 rounded-2xl p-4">
+          <p className="text-sm font-semibold">Repair totals</p>
+          <p className="text-ink-300 text-xs mt-1 mb-3">
+            If the total counted number looks wrong, this rescans every non-deleted
+            item and rewrites the session total. Safe to run any time. Does not
+            change individual item counts.
+          </p>
+          <Button
+            variant="secondary"
+            size="md"
+            className="w-full"
+            onClick={handleRepair}
+            disabled={repairing}
+          >
+            {repairing ? 'Recalculating…' : 'Recalculate totals'}
+          </Button>
+        </div>
       </div>
 
       <div className="pb-safe bg-ink-900 border-t border-ink-800">
