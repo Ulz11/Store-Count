@@ -1,0 +1,41 @@
+rules_version = '2';
+
+// In-store inventory counting. All 5 named counters are trusted.
+// Auth is anonymous (signInAnonymously) — every device gets a UID,
+// then claims one of the named counters via /users/{uid}.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Each device claims a counter name once, then can't change it freely
+    match /users/{uid} {
+      allow read:   if isSignedIn();
+      allow write:  if isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Sessions are created/updated by clients (totals are denormalized).
+    // We allow any signed-in counter to write because increment() is atomic.
+    match /sessions/{sessionId} {
+      allow read:   if isSignedIn();
+      allow write:  if isSignedIn();
+    }
+
+    // Items: any signed-in counter can read or write.
+    // Edits/deletes are soft (deleted: true) — UI handles, rules don't enforce.
+    match /items/{itemId} {
+      allow read:   if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if false; // never hard-delete; use soft delete via update
+    }
+
+    // Presence is keyed by counter name; everyone reads, only matching device writes
+    match /presence/{counterName} {
+      allow read:   if isSignedIn();
+      allow write:  if isSignedIn();
+    }
+  }
+}

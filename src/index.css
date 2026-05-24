@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
+
+  body {
+    @apply bg-ink-950 text-white font-sans antialiased;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  button {
+    @apply touch-manip select-none;
+  }
+
+  input, textarea {
+    @apply touch-manip;
+    font-size: 16px; /* prevents iOS zoom on focus */
+  }
+
+  /* Disable text selection on the chrome — counters tap a lot */
+  .no-select {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Prevent body scroll bounce on iOS */
+  #root {
+    overflow: hidden;
+    position: fixed;
+    inset: 0;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply touch-manip select-none transition-transform active:scale-95;
+  }
+
+  /* Apple Calculator-style big circular buttons */
+  .btn-calc {
+    @apply rounded-full text-3xl font-light flex items-center justify-center;
+    @apply transition-all duration-75 active:opacity-70;
+  }
+}
