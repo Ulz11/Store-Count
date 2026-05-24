@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { Button } from '@/components/ui/Button';
 
 interface BarcodeScannerProps {
@@ -9,6 +9,22 @@ interface BarcodeScannerProps {
 }
 
 const SCANNER_ID = 'barcode-scanner-region';
+
+// 1D barcodes on clothing tags are usually EAN-13 or Code-128.
+// QR is included as a bonus. Telling the decoder which formats to look for
+// dramatically speeds up scanning vs the default "try everything" mode.
+const FORMATS = [
+  Html5QrcodeSupportedFormats.EAN_13,
+  Html5QrcodeSupportedFormats.EAN_8,
+  Html5QrcodeSupportedFormats.UPC_A,
+  Html5QrcodeSupportedFormats.UPC_E,
+  Html5QrcodeSupportedFormats.CODE_128,
+  Html5QrcodeSupportedFormats.CODE_39,
+  Html5QrcodeSupportedFormats.CODE_93,
+  Html5QrcodeSupportedFormats.ITF,
+  Html5QrcodeSupportedFormats.CODABAR,
+  Html5QrcodeSupportedFormats.QR_CODE,
+];
 
 export function BarcodeScanner({ onScan, onCancel, onManualEntry }: BarcodeScannerProps) {
   const scannerRef = useRef<Html5Qrcode | null>(null);
@@ -21,21 +37,37 @@ export function BarcodeScanner({ onScan, onCancel, onManualEntry }: BarcodeScann
 
     const start = async () => {
       try {
-        scanner = new Html5Qrcode(SCANNER_ID, { verbose: false });
+        scanner = new Html5Qrcode(SCANNER_ID, {
+          verbose: false,
+          formatsToSupport: FORMATS,
+          useBarCodeDetectorIfSupported: true,
+        });
         scannerRef.current = scanner;
 
         const config = {
-          fps: 10,
+          fps: 15,
+          // Wide rectangle suited for 1D barcodes (EAN/UPC are ~3:1)
           qrbox: (vw: number, vh: number) => {
-            const minEdge = Math.min(vw, vh);
-            const w = Math.round(minEdge * 0.75);
-            const h = Math.round(w * 0.6);
+            const w = Math.round(Math.min(vw, vh) * 0.9);
+            const h = Math.round(w * 0.5);
             return { width: w, height: h };
           },
           aspectRatio: window.innerHeight / window.innerWidth,
+          videoConstraints: {
+            facingMode: { ideal: 'environment' },
+            // Higher resolution → small/dense tag barcodes decode reliably.
+            // iOS Safari clamps this if camera can't deliver, so it's safe.
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            // Hint for autofocus on supported devices
+            focusMode: 'continuous',
+          } as MediaTrackConstraints,
+          experimentalFeatures: {
+            useBarCodeDetectorIfSupported: true,
+          },
         };
 
-        // Prefer back camera; fall back if 'exact' rejects
+        // Prefer the exact back camera first; fall back to any environment-facing.
         try {
           await scanner.start(
             { facingMode: { exact: 'environment' } },
@@ -56,7 +88,7 @@ export function BarcodeScanner({ onScan, onCancel, onManualEntry }: BarcodeScann
         if (!active) return;
         const msg = e instanceof Error ? e.message : String(e);
         if (/permission|notallow/i.test(msg)) {
-          setError('Camera permission denied. Please allow camera access in browser settings.');
+          setError('Camera permission denied. Allow camera access in Safari settings.');
         } else if (/notfound|nodevice/i.test(msg)) {
           setError('No camera found on this device.');
         } else {
@@ -112,12 +144,19 @@ export function BarcodeScanner({ onScan, onCancel, onManualEntry }: BarcodeScann
 
         {/* Scanline overlay */}
         {!error && !starting && (
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-            <div className="relative w-3/4 max-w-sm aspect-[5/3]">
-              <div className="absolute inset-0 border-2 border-white/70 rounded-2xl" />
-              <div className="absolute left-2 right-2 h-px bg-accent-orange shadow-[0_0_8px_#ff9f0a] animate-scan-line" />
+          <>
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+              <div className="relative w-[90%] aspect-[2.2/1]">
+                <div className="absolute inset-0 border-2 border-white/70 rounded-2xl" />
+                <div className="absolute left-2 right-2 h-px bg-accent-orange shadow-[0_0_8px_#ff9f0a] animate-scan-line" />
+              </div>
             </div>
-          </div>
+            <div className="absolute bottom-3 left-0 right-0 text-center pointer-events-none">
+              <p className="text-white/80 text-xs">
+                Hold ~15 cm away · fill the box · steady
+              </p>
+            </div>
+          </>
         )}
 
         {starting && !error && (
